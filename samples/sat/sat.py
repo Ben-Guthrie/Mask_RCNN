@@ -105,8 +105,9 @@ class SatelliteDataset(utils.Dataset):
         # Add images
         with open(subset_file, 'r') as f:
             for line in f.readlines()[1:]:
-                if line[1] == label:
-                    filename = line[0]
+                words = line.split()
+                if int(words[1]) == label:
+                    filename = words[0]
                     image_path = os.path.join(dataset_dir, "img", filename)
                     mask_path = os.path.join(dataset_dir, "labels", filename)
 
@@ -133,7 +134,7 @@ class SatelliteDataset(utils.Dataset):
         info = self.image_info[image_id]
         mask_img = skimage.io.imread(info['mask_path'], as_gray=True)
         # Create a mask of 0s or 1s, depending on the intensity of the image
-        mask = np.zeros_like(mask_img, dtpy=np.int)
+        mask = np.zeros_like(mask_img, dtype=np.int)
         mask[mask_img > 0.5] = 1
 
         # Return mask, and array of class IDs of each instance. Since we have
