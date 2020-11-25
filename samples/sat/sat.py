@@ -63,13 +63,13 @@ class SatelliteConfig(Config):
 
     # We use a GPU with 12GB memory, which can fit two images.
     # Adjust down if you use a smaller GPU.
-    IMAGES_PER_GPU = 2
+    IMAGES_PER_GPU = 1
 
     # Number of classes (including background)
     NUM_CLASSES = 1 + 1  # Background + sat
 
     # Number of training steps per epoch
-    STEPS_PER_EPOCH = 100
+    STEPS_PER_EPOCH = 50
 
     # Skip detections with < 90% confidence
     DETECTION_MIN_CONFIDENCE = 0.9
@@ -134,7 +134,7 @@ class SatelliteDataset(utils.Dataset):
         info = self.image_info[image_id]
         mask_img = skimage.io.imread(info['mask_path'], as_gray=True)
         # Create a mask of 0s or 1s, depending on the intensity of the image
-        mask = np.zeros_like(mask_img, dtype=np.int)
+        mask = np.zeros_like(mask_img, dtype=np.int)[..., np.newaxis]
         mask[mask_img > 0.5] = 1
 
         # Return mask, and array of class IDs of each instance. Since we have
@@ -169,7 +169,7 @@ def train(model):
     print("Training network heads")
     model.train(dataset_train, dataset_val,
                 learning_rate=config.LEARNING_RATE,
-                epochs=30,
+                epochs=20,
                 layers='heads')
 
 
