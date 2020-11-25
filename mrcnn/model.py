@@ -1931,9 +1931,7 @@ class MaskRCNN():
             # TODO: can this be optimized to avoid duplicating the anchors?
             anchors = np.broadcast_to(anchors, (config.BATCH_SIZE,) + anchors.shape)
             # A hack to get around Keras's bad support for constants
-            anchor_layer = AnchorsLayer(name="anchors")
-            anchors = anchor_layer(anchors)
-            #anchors = KL.Lambda(lambda x: tf.Variable(anchors), name="anchors")(input_image)
+            anchors = KL.Lambda(lambda x: tf.Variable(anchors), name="anchors")(input_image)
         else:
             anchors = input_anchors
 
@@ -2868,14 +2866,3 @@ def denorm_boxes_graph(boxes, shape):
     scale = tf.concat([h, w, h, w], axis=-1) - tf.constant(1.0)
     shift = tf.constant([0., 0., 1., 1.])
     return tf.cast(tf.round(tf.multiply(boxes, scale) + shift), tf.int32)
-
-class AnchorsLayer(tf.keras.layers.Layer):
-    def __init__(self, name="anchors", **kwargs):
-        super(AnchorsLayer, self).__init__(name=name, **kwargs)
-
-    def call(self, anchor):
-        return anchor
-
-    def get_config(self) :
-        config = super(AnchorsLayer, self).get_config()
-        return config
