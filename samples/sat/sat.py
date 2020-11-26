@@ -227,13 +227,13 @@ def apply_mask_to_image(image, mask):
     mask_colour = [1, 0, 0] * 255
     # Create an image from the mask
     mask_img = np.zeros_like(image)
-    print(mask_img.shape, mask.shape)
-    mask_img[mask > 0.5] = mask_colour
+    mask_resized = np.tile(mask, [1,1,3])
+    mask_img[mask_resized > 0.5] = mask_colour
     # Combine the image with the mask
     combined = np.ubyte(0.4*image + 0.6*mask_img)
     # Recreate the image
     image_output = image
-    image_output[mask > 0.5] = combined
+    image_output[mask_resized > 0.5] = combined
     return image_output
 
 
