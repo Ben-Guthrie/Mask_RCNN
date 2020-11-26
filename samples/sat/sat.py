@@ -29,7 +29,7 @@ Usage: import the module (see Jupyter notebooks for examples), or run from
 
 import os
 import sys
-import datetime
+import time
 import numpy as np
 import skimage.draw
 import skimage.io
@@ -173,82 +173,95 @@ def train(model):
                 layers='heads')
 
 
-def color_splash(image, mask):
-    """Apply color splash effect.
-    image: RGB image [height, width, 3]
-    mask: instance segmentation mask [height, width, instance count]
-
-    Returns result image.
+def test(model, dataset, coco, eval_type="bbox", limit=0, image_ids=None):
+    """ Test model on dataset
+    dataset: A Dataset object with valiadtion data
+    eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
+    limit: if not 0, it's the number of images to use for evaluation
     """
-    # Make a grayscale copy of the image. The grayscale copy still
-    # has 3 RGB channels, though.
-    gray = skimage.color.gray2rgb(skimage.color.rgb2gray(image)) * 255
-    # Copy color pixels from the original color image where mask is set
-    if mask.shape[-1] > 0:
-        # We're treating all instances as one, so collapse the mask into one layer
-        mask = (np.sum(mask, -1, keepdims=True) >= 1)
-        splash = np.where(mask, image, gray).astype(np.uint8)
-    else:
-        splash = gray.astype(np.uint8)
-    return splash
+    os.makedirs(os.path.join(args.dataset, 'label_outputs'))
+    # Pick images from the dataset
+    image_ids = image_ids or dataset.image_ids
 
+    # Limit to a subset
+    if limit:
+        image_ids = image_ids[:limit]
 
-def test(model, image_path=None, video_path=None):
-    assert image_path or video_path
-    raise NotImplementedError()
+    t_prediction = 0
+    t_start = time.time()
 
-    # Image or video?
-    if image_path:
-        # Run model detection and generate the color splash effect
-        print("Running on {}".format(args.image))
-        # Read image
-        image = skimage.io.imread(args.image)
-        # Detect objects
-        r = model.detect([image], verbose=1)[0]
-        # Color splash
-        splash = color_splash(image, r['masks'])
+    results = []
+    for i, image_id in enumerate(image_ids):
+        # Load image
+        image = dataset.load_image(image_id)
+
+        # Run detection
+        t = time.time()
+        r = model.detect([image], verbose=0)[0]
+        t_prediction += (time.time() - t)
+
+        # Convert results to COCO format
+        # Cast masks to uint8 because COCO tools errors out on bool
+        image_results = build_results(dataset, image_id,
+                                           r["rois"], r["class_ids"],
+                                           r["scores"],
+                                           r["masks"].astype(np.uint8))
+        results.extend(image_results)
+        # Apply mask
+        masked_img = apply_mask_to_image(image, r['masks'])
         # Save output
-        file_name = "splash_{:%Y%m%dT%H%M%S}.png".format(datetime.datetime.now())
-        skimage.io.imsave(file_name, splash)
-    elif video_path:
-        import cv2
-        # Video capture
-        vcapture = cv2.VideoCapture(video_path)
-        width = int(vcapture.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(vcapture.get(cv2.CAP_PROP_FRAME_HEIGHT))
-        fps = vcapture.get(cv2.CAP_PROP_FPS)
+        file_name = os.path.join(args.dataset, 'label_outputs', image_id)
+        skimage.io.imsave(file_name, masked_img)
 
-        # Define codec and create video writer
-        file_name = "splash_{:%Y%m%dT%H%M%S}.avi".format(datetime.datetime.now())
-        vwriter = cv2.VideoWriter(file_name,
-                                  cv2.VideoWriter_fourcc(*'MJPG'),
-                                  fps, (width, height))
+    # Evaluate
+    print(results)
 
-        count = 0
-        success = True
-        while success:
-            print("frame: ", count)
-            # Read next image
-            success, image = vcapture.read()
-            if success:
-                # OpenCV returns images as BGR, convert to RGB
-                image = image[..., ::-1]
-                # Detect objects
-                r = model.detect([image], verbose=0)[0]
-                # Color splash
-                splash = color_splash(image, r['masks'])
-                # RGB -> BGR to save image to video
-                splash = splash[..., ::-1]
-                # Add image to video writer
-                vwriter.write(splash)
-                count += 1
-        vwriter.release()
-    print("Saved to ", file_name)
+    print("Prediction time: {}. Average {}/image".format(
+        t_prediction, t_prediction / len(image_ids)))
+    print("Total time: ", time.time() - t_start)
 
 
-############################################################
-#  Training
-############################################################
+def apply_mask_to_image(image, mask):
+    # Set the mask colour to red
+    mask_colour = [1, 0, 0] * 255
+    # Create an image from the mask
+    mask_img = np.zeros_like(image)
+    print(mask_img.shape, mask.shape)
+    mask_img[mask > 0.5] = mask_colour
+    # Combine the image with the mask
+    combined = np.ubyte(0.4*image + 0.6*mask_img)
+    # Recreate the image
+    image_output = image
+    image_output[mask > 0.5] = combined
+    return image_output
+
+
+def build_results(dataset, image_ids, rois, class_ids, scores, masks):
+    """Arrange resutls to match COCO specs in http://cocodataset.org/#format
+    """
+    # If no results, return an empty list
+    if rois is None:
+        return []
+
+    results = []
+    for image_id in image_ids:
+        # Loop through detections
+        for i in range(rois.shape[0]):
+            class_id = class_ids[i]
+            score = scores[i]
+            bbox = np.around(rois[i], 1)
+            mask = masks[:, :, i]
+
+            result = {
+                "image_id": image_id,
+                "category_id": dataset.get_source_class_id(class_id, "coco"),
+                "bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
+                "score": score,
+                "segmentation": mask
+            }
+            results.append(result)
+    return results
+
 
 if __name__ == '__main__':
     import argparse
@@ -297,6 +310,7 @@ if __name__ == '__main__':
             # one image at a time. Batch size = GPU_COUNT * IMAGES_PER_GPU
             GPU_COUNT = 1
             IMAGES_PER_GPU = 1
+            DETECTION_MIN_CONFIDENCE = 0.
         config = InferenceConfig()
     config.display()
 
@@ -338,7 +352,11 @@ if __name__ == '__main__':
     if args.command == "train":
         train(model)
     elif args.command == "test":
-        test(model)
+        dataset_val = SatelliteDataset()
+        data = dataset_val.load_satellite(args.dataset, "test")
+        dataset_val.prepare()
+        print("Running test on {} images.".format(args.limit))
+        test(model, dataset_val, data, "bbox", limit=int(args.limit))
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'test'".format(args.command))
