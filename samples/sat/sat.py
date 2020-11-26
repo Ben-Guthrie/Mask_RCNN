@@ -173,7 +173,7 @@ def train(model):
                 layers='heads')
 
 
-def test(model, dataset, coco, eval_type="bbox", limit=0, image_ids=None):
+def test(model, dataset, eval_type="bbox", limit=0, image_ids=None):
     """ Test model on dataset
     dataset: A Dataset object with valiadtion data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
@@ -238,8 +238,6 @@ def apply_mask_to_image(image, mask):
 
 
 def build_results(dataset, image_id, rois, class_ids, scores, masks):
-    """Arrange resutls to match COCO specs in http://cocodataset.org/#format
-    """
     # If no results, return an empty list
     if rois is None:
         return []
@@ -254,7 +252,7 @@ def build_results(dataset, image_id, rois, class_ids, scores, masks):
 
         result = {
             "image_id": image_id,
-            "category_id": dataset.get_source_class_id(class_id, "coco"),
+            "category_id": dataset.get_source_class_id(class_id, "sat"),
             "bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
             "score": score,
             "segmentation": mask
