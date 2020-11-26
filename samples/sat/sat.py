@@ -236,7 +236,7 @@ def apply_mask_to_image(image, mask):
     return image_output
 
 
-def build_results(dataset, image_ids, rois, class_ids, scores, masks):
+def build_results(dataset, image_id, rois, class_ids, scores, masks):
     """Arrange resutls to match COCO specs in http://cocodataset.org/#format
     """
     # If no results, return an empty list
@@ -244,22 +244,21 @@ def build_results(dataset, image_ids, rois, class_ids, scores, masks):
         return []
 
     results = []
-    for image_id in image_ids:
-        # Loop through detections
-        for i in range(rois.shape[0]):
-            class_id = class_ids[i]
-            score = scores[i]
-            bbox = np.around(rois[i], 1)
-            mask = masks[:, :, i]
+    # Loop through detections
+    for i in range(rois.shape[0]):
+        class_id = class_ids[i]
+        score = scores[i]
+        bbox = np.around(rois[i], 1)
+        mask = masks[:, :, i]
 
-            result = {
-                "image_id": image_id,
-                "category_id": dataset.get_source_class_id(class_id, "coco"),
-                "bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
-                "score": score,
-                "segmentation": mask
-            }
-            results.append(result)
+        result = {
+            "image_id": image_id,
+            "category_id": dataset.get_source_class_id(class_id, "coco"),
+            "bbox": [bbox[1], bbox[0], bbox[3] - bbox[1], bbox[2] - bbox[0]],
+            "score": score,
+            "segmentation": mask
+        }
+        results.append(result)
     return results
 
 
