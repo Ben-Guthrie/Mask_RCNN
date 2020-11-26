@@ -285,6 +285,10 @@ if __name__ == '__main__':
     parser.add_argument('--image', required=False,
                         metavar="path or URL to image",
                         help='Image to apply the color splash effect on')
+    parser.add_argument('--limit', required=False,
+                        default=300,
+                        metavar="<image count>",
+                        help='Images to use for evaluation (default=500)')
     parser.add_argument('--video', required=False,
                         metavar="path or URL to video",
                         help='Video to apply the color splash effect on')
