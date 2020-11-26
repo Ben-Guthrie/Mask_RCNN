@@ -179,7 +179,8 @@ def test(model, dataset, coco, eval_type="bbox", limit=0, image_ids=None):
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
     limit: if not 0, it's the number of images to use for evaluation
     """
-    os.makedirs(os.path.join(args.dataset, 'label_outputs'))
+    if not os.path.exists(os.path.join(args.dataset, 'label_outputs')):
+        os.makedirs(os.path.join(args.dataset, 'label_outputs'))
     # Pick images from the dataset
     image_ids = image_ids or dataset.image_ids
 
