@@ -173,7 +173,7 @@ def train(model):
                 layers='heads')
 
 
-def test(model, dataset, truth, eval_type="bbox", limit=0, image_ids=None):
+def test(model, dataset, truth, eval_type="bbox", limit=0):
     """ Test model on dataset
     dataset: A Dataset object with valiadtion data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
@@ -182,11 +182,14 @@ def test(model, dataset, truth, eval_type="bbox", limit=0, image_ids=None):
     if not os.path.exists(os.path.join(args.dataset, 'label_outputs')):
         os.makedirs(os.path.join(args.dataset, 'label_outputs'))
     # Pick images from the dataset
-    image_ids = image_ids or dataset.image_ids
+    image_ids = dataset.image_ids
 
     # Limit to a subset
     if limit:
         image_ids = image_ids[:limit]
+
+    # Get corresponding satellite image IDs.
+    sat_image_ids = [dataset.image_info[id]["id"] for id in image_ids]
 
     t_prediction = 0
     t_start = time.time()
@@ -203,7 +206,7 @@ def test(model, dataset, truth, eval_type="bbox", limit=0, image_ids=None):
 
         # Convert results to COCO format
         # Cast masks to uint8 because COCO tools errors out on bool
-        image_results = build_results(dataset, image_id,
+        image_results = build_results(dataset, sat_image_ids[i],
                                            r["rois"], r["class_ids"],
                                            r["scores"],
                                            r["masks"].astype(np.uint8))
@@ -211,7 +214,7 @@ def test(model, dataset, truth, eval_type="bbox", limit=0, image_ids=None):
         # Apply mask
         masked_img = apply_mask_to_image(image, r['masks'])
         # Save output
-        file_name = os.path.join(args.dataset, 'label_outputs', image_id)
+        file_name = os.path.join(args.dataset, 'label_outputs', sat_image_ids[i])
         skimage.io.imsave(file_name, masked_img)
 
     # Evaluate
@@ -224,16 +227,15 @@ def test(model, dataset, truth, eval_type="bbox", limit=0, image_ids=None):
 
 def apply_mask_to_image(image, mask):
     # Set the mask colour to red
-    mask_colour = [1, 0, 0] * 255
+    mask_colour = np.array([1, 0, 0]) * 255
     # Create an image from the mask
     mask_img = np.zeros_like(image)
-    mask_resized = np.tile(mask, [1,1,3])
-    mask_img[mask_resized > 0.5] = mask_colour
+    mask_img[mask[...,0] > 0.5] = mask_colour
     # Combine the image with the mask
-    combined = np.ubyte(0.4*image + 0.6*mask_img)
+    combined = 0.4*image + 0.6*mask_img
     # Recreate the image
-    image_output = image
-    image_output[mask_resized > 0.5] = combined
+    image_output = image.copy()
+    image_output[mask[...,0] > 0.5] = combined[mask[...,0] > 0.]
     return image_output
 
 
