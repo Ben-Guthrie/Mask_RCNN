@@ -173,7 +173,7 @@ def train(model):
                 layers='heads')
 
 
-def test(model, dataset, eval_type="bbox", limit=0, image_ids=None):
+def test(model, dataset, truth, eval_type="bbox", limit=0, image_ids=None):
     """ Test model on dataset
     dataset: A Dataset object with valiadtion data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
