@@ -48,6 +48,7 @@ COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 # Directory to save logs and model checkpoints, if not provided
 # through the command line argument --logs
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
+DEFAULT_RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 
 ############################################################
 #  Configurations
@@ -134,12 +135,12 @@ class SatelliteDataset(utils.Dataset):
         info = self.image_info[image_id]
         mask_img = skimage.io.imread(info['mask_path'], as_gray=True)
         # Create a mask of 0s or 1s, depending on the intensity of the image
-        mask = np.zeros_like(mask_img, dtype=np.int)[..., np.newaxis]
+        mask = np.zeros_like(mask_img, dtype=int)[..., np.newaxis]
         mask[mask_img > 0.5] = 1
 
         # Return mask, and array of class IDs of each instance. Since we have
         # one class ID only, we return an array of 1s
-        return mask.astype(np.bool), np.ones([mask.shape[-1]], dtype=np.int32)
+        return mask, np.ones([mask.shape[-1]], dtype=np.int32)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -173,14 +174,14 @@ def train(model):
                 layers='heads')
 
 
-def test(model, dataset, truth, eval_type="bbox", limit=0):
+def test(model, dataset, truth, results_dir, eval_type="segm", limit=0):
     """ Test model on dataset
     dataset: A Dataset object with valiadtion data
     eval_type: "bbox" or "segm" for bounding box or segmentation evaluation
     limit: if not 0, it's the number of images to use for evaluation
     """
-    if not os.path.exists(os.path.join(args.dataset, 'label_outputs')):
-        os.makedirs(os.path.join(args.dataset, 'label_outputs'))
+    if not os.path.exists(results_dir):
+        os.makedirs(results_dir)
     # Pick images from the dataset
     image_ids = dataset.image_ids
 
@@ -214,7 +215,7 @@ def test(model, dataset, truth, eval_type="bbox", limit=0):
         # Apply mask
         masked_img = apply_mask_to_image(image, r['masks'])
         # Save output
-        file_name = os.path.join(args.dataset, 'label_outputs', sat_image_ids[i])
+        file_name = os.path.join(results_dir, sat_image_ids[i])
         skimage.io.imsave(file_name, masked_img)
 
     # Evaluate
@@ -282,10 +283,14 @@ if __name__ == '__main__':
                         default=DEFAULT_LOGS_DIR,
                         metavar="/path/to/logs/",
                         help='Logs and checkpoints directory (default=logs/)')
+    parser.add_argument('--results', required=False,
+                        default=DEFAULT_RESULTS_DIR,
+                        metavar="/path/to/results/",
+                        help='Results directory (default=results/)')
     parser.add_argument('--limit', required=False,
                         default=300,
                         metavar="<image count>",
-                        help='Images to use for evaluation (default=500)')
+                        help='Images to use for evaluation (default=300)')
     args = parser.parse_args()
 
     # Validate arguments
@@ -354,7 +359,7 @@ if __name__ == '__main__':
         data = dataset_val.load_satellite(args.dataset, "test")
         dataset_val.prepare()
         print("Running test on {} images.".format(args.limit))
-        test(model, dataset_val, data, "bbox", limit=int(args.limit))
+        test(model, dataset_val, data, args.results, "segm", limit=int(args.limit))
     else:
         print("'{}' is not recognized. "
               "Use 'train' or 'test'".format(args.command))
