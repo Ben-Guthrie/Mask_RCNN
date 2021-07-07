@@ -217,6 +217,9 @@ def test(model, dataset, truth, results_dir, eval_type="segm", limit=0):
         # Save output
         file_name = os.path.join(results_dir, sat_image_ids[i])
         skimage.io.imsave(file_name, masked_img)
+        results_file = os.path.splitext(os.path.join(results_dir, sat_image_ids[i]))[0] + ".txt"
+        with open(results_file, 'w') as f:
+            print(image_results, file=f)
 
     # Evaluate
     print(results)
@@ -288,9 +291,9 @@ if __name__ == '__main__':
                         metavar="/path/to/results/",
                         help='Results directory (default=results/)')
     parser.add_argument('--limit', required=False,
-                        default=300,
+                        default=0,
                         metavar="<image count>",
-                        help='Images to use for evaluation (default=300)')
+                        help='Images to use for evaluation (default=0)')
     args = parser.parse_args()
 
     # Validate arguments
