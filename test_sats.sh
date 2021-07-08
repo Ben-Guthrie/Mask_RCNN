@@ -11,3 +11,4 @@ for dataset_path in data_dir/*; do
     cd samples/sat
     python sat.py test --dataset $dataset_path --weights last --results results/$dataset
     cd ../../
+done
