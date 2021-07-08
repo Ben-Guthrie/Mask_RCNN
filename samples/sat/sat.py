@@ -50,6 +50,9 @@ COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 DEFAULT_RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 
+# Label colours
+MASK_COLOURS = [[183, 28, 28], [49, 27, 146], [230, 81, 0], [51, 105, 30]]
+
 ############################################################
 #  Configurations
 ############################################################
@@ -103,6 +106,14 @@ class SatelliteDataset(utils.Dataset):
         # Train or validation dataset?
         subset_file = os.path.join(dataset_dir, 'subsets', 'label_subsets.txt')
 
+        # Get labels
+        labels = {}
+        label_dirs = [ldir for ldir in os.path.join(dataset_dir, "labels")
+                        if os.path.isdir(os.path.join(dataset_dir, "labels", ldir))]
+        for i, ldir in enumerate(label_dirs):
+            labels[i] = ldir
+
+
         # Add images
         with open(subset_file, 'r') as f:
             for line in f.readlines()[1:]:
@@ -110,13 +121,15 @@ class SatelliteDataset(utils.Dataset):
                 if int(words[1]) == label:
                     filename = words[0]
                     image_path = os.path.join(dataset_dir, "img", filename)
-                    mask_path = os.path.join(dataset_dir, "labels", filename)
+                    mask_paths = [os.path.join(dataset_dir, "labels", labels[i], filename)
+                                    for i in range(len(label_dirs))]
 
                     self.add_image(
                         "sat",
                         image_id=filename,  # use file name as a unique image id
                         path=image_path,
-                        mask_path=mask_path)
+                        mask_paths=mask_paths,
+                        labels=labels)
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
@@ -133,14 +146,18 @@ class SatelliteDataset(utils.Dataset):
         # Load mask of shape
         # [height, width, instance_count]
         info = self.image_info[image_id]
-        mask_img = skimage.io.imread(info['mask_path'], as_gray=True)
-        # Create a mask of 0s or 1s, depending on the intensity of the image
-        mask = np.zeros_like(mask_img, dtype=int)[..., np.newaxis]
-        mask[mask_img > 0.5] = 1
+        masks = []
+        for mask_path in info['mask_paths']:
+            mask_img = skimage.io.imread(mask_path, as_gray=True)
+            # Create a mask of 0s or 1s, depending on the intensity of the image
+            mask = np.zeros_like(mask_img, dtype=int)[..., np.newaxis]
+            mask[mask_img > 0.5] = 1
+            masks.append(mask)
+        masks = np.concatenate(masks, axis=-1)
 
         # Return mask, and array of class IDs of each instance. Since we have
         # one class ID only, we return an array of 1s
-        return mask, np.ones([mask.shape[-1]], dtype=np.int32)
+        return masks, np.arange([masks.shape[-1]], dtype=np.int32)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -212,8 +229,12 @@ def test(model, dataset, truth, results_dir, eval_type="segm", limit=0):
                                            r["scores"],
                                            r["masks"].astype(np.uint8))
         results.extend(image_results)
-        # Apply mask
-        masked_img = apply_mask_to_image(image, r['masks'])
+        masked_img = image
+        for j, class_id in enumerate(r['class_ids']):
+            mask = r['masks'][...,j]
+            # Apply mask
+            colour = MASK_COLOURS[class_id % len(MASK_COLOURS)]
+            masked_img = apply_mask_to_image(masked_img, mask, colour)
         # Save output
         file_name = os.path.join(results_dir, sat_image_ids[i])
         skimage.io.imsave(file_name, masked_img)
@@ -229,12 +250,11 @@ def test(model, dataset, truth, results_dir, eval_type="segm", limit=0):
     print("Total time: ", time.time() - t_start)
 
 
-def apply_mask_to_image(image, mask):
+def apply_mask_to_image(image, mask, colour):
     # Set the mask colour to red
-    mask_colour = np.array([1, 0, 0]) * 255
     # Create an image from the mask
     mask_img = np.zeros_like(image)
-    mask_img[mask[...,0] > 0.5] = mask_colour
+    mask_img[mask > 0.5] = colour
     # Combine the image with the mask
     combined = 0.4*image + 0.6*mask_img
     # Recreate the image
