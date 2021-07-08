@@ -6,4 +6,6 @@ source ../setup.sh
 
 data_dir=$1
 
-python samples/sat/sat.py train --dataset $data_dir --weights coco
+cd samples/sat
+python sat.py train --dataset $data_dir --weights coco
+cd ../../

@@ -8,4 +8,6 @@ data_dir=$1
 
 for dataset_path in data_dir/*; do
     dataset=$(basename $dataset_path)
-    python samples/sat/sat.py test --dataset $dataset_path --weights last --results results/$dataset
+    cd samples/sat
+    python sat.py test --dataset $dataset_path --weights last --results results/$dataset
+    cd ../../

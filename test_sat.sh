@@ -6,4 +6,6 @@ source ../setup.sh
 
 data_dir=$1
 
-python samples/sat/sat.py test --dataset $data_dir --weights last
+cd samples/sat
+python sat.py test --dataset $data_dir --weights last
+cd ../../

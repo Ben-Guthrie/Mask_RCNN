@@ -50,13 +50,14 @@ COCO_WEIGHTS_PATH = os.path.join(ROOT_DIR, "mask_rcnn_coco.h5")
 DEFAULT_LOGS_DIR = os.path.join(ROOT_DIR, "logs")
 DEFAULT_RESULTS_DIR = os.path.join(ROOT_DIR, "results")
 
-# Label colours
+# Label configs
 MASK_COLOURS = [[183, 28, 28], [49, 27, 146], [230, 81, 0], [51, 105, 30]]
+NUM_LABELS = 2 # Including background
 
 ############################################################
 #  Configurations
 ############################################################
-
+np.set_printoptions(threshold=sys.maxsize)
 
 class SatelliteConfig(Config):
     """Configuration for training on the toy  dataset.
@@ -70,7 +71,7 @@ class SatelliteConfig(Config):
     IMAGES_PER_GPU = 1
 
     # Number of classes (including background)
-    NUM_CLASSES = 1 + 1  # Background + sat
+    NUM_CLASSES = NUM_LABELS
 
     # Number of training steps per epoch
     STEPS_PER_EPOCH = 300
@@ -90,8 +91,12 @@ class SatelliteDataset(utils.Dataset):
         dataset_dir: Root directory of the dataset.
         subset: Subset to load: train or val
         """
-        # Add classes. We have only one class to add.
-        self.add_class("sat", 1, "solarpanel")
+        # Add clases
+        label_dirs = [ldir for ldir in os.listdir(os.path.join(dataset_dir, "labels"))
+                        if os.path.isdir(os.path.join(dataset_dir, "labels", ldir))]
+        for i, ldir in enumerate(label_dirs):
+            self.add_class("sat", i+1, ldir)
+
 
         if subset == 'train':
             label = 0
@@ -106,12 +111,6 @@ class SatelliteDataset(utils.Dataset):
         # Train or validation dataset?
         subset_file = os.path.join(dataset_dir, 'subsets', 'label_subsets.txt')
 
-        # Get labels
-        labels = {}
-        label_dirs = [ldir for ldir in os.path.join(dataset_dir, "labels")
-                        if os.path.isdir(os.path.join(dataset_dir, "labels", ldir))]
-        for i, ldir in enumerate(label_dirs):
-            labels[i] = ldir
 
 
         # Add images
@@ -121,15 +120,14 @@ class SatelliteDataset(utils.Dataset):
                 if int(words[1]) == label:
                     filename = words[0]
                     image_path = os.path.join(dataset_dir, "img", filename)
-                    mask_paths = [os.path.join(dataset_dir, "labels", labels[i], filename)
-                                    for i in range(len(label_dirs))]
+                    mask_paths = [os.path.join(dataset_dir, "labels", ldir, filename)
+                                    for ldir in label_dirs]
 
                     self.add_image(
                         "sat",
                         image_id=filename,  # use file name as a unique image id
                         path=image_path,
-                        mask_paths=mask_paths,
-                        labels=labels)
+                        mask_paths=mask_paths)
 
     def load_mask(self, image_id):
         """Generate instance masks for an image.
@@ -139,13 +137,12 @@ class SatelliteDataset(utils.Dataset):
         class_ids: a 1D array of class IDs of the instance masks.
         """
         # If not a sat dataset image, delegate to parent class.
-        image_info = self.image_info[image_id]
-        if image_info["source"] != "sat":
+        info = self.image_info[image_id]
+        if info["source"] != "sat":
             return super(self.__class__, self).load_mask(image_id)
 
         # Load mask of shape
         # [height, width, instance_count]
-        info = self.image_info[image_id]
         masks = []
         for mask_path in info['mask_paths']:
             mask_img = skimage.io.imread(mask_path, as_gray=True)
@@ -155,9 +152,8 @@ class SatelliteDataset(utils.Dataset):
             masks.append(mask)
         masks = np.concatenate(masks, axis=-1)
 
-        # Return mask, and array of class IDs of each instance. Since we have
-        # one class ID only, we return an array of 1s
-        return masks, np.arange([masks.shape[-1]], dtype=np.int32)
+        # Return mask, and array of class IDs of each instance.
+        return masks, np.arange(1, masks.shape[-1]+1, dtype=np.int32)
 
     def image_reference(self, image_id):
         """Return the path of the image."""
@@ -242,9 +238,7 @@ def test(model, dataset, truth, results_dir, eval_type="segm", limit=0):
         with open(results_file, 'w') as f:
             print(image_results, file=f)
 
-    # Evaluate
-    print(results)
-
+    # Timing
     print("Prediction time: {}. Average {}/image".format(
         t_prediction, t_prediction / len(image_ids)))
     print("Total time: ", time.time() - t_start)
